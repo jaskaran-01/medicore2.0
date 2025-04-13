@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Chatbot Debugger</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .debug-section {
+            margin-bottom: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+        }
+        .debug-header {
+            padding: 0.75rem 1rem;
+            background-color: #f8f9fa;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .debug-content {
+            padding: 1rem;
+            display: none;
+        }
+        .debug-content.show {
+            display: block;
+        }
+        .symptom-badge {
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .disease-card {
+            margin-bottom: 1rem;
+        }
+        .similarity-bar {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .similarity-fill {
+            height: 100%;
+            background-color: #0d6efd;
+            border-radius: 0.25rem;
+            transition: width 0.3s ease;
+        }
+        .recommendation-item {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background-color: #f8f9fa;
+            border-radius: 0.25rem;
+        }
+        #loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            z-index: 1000;
+        }
+        .spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .pagination {
+            margin-top: 1rem;
+        }
+        .disease-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .collapsed-content {
+            display: none;
+        }
+        .expand-button {
+            cursor: pointer;
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">Medical Chatbot Debugger</h1>
+        
+        <!-- Input Section -->
+        <div class="debug-section">
+            <div class="debug-header" onclick="toggleSection('input-section')">
+                <h5 class="mb-0">Input</h5>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="debug-content" id="input-section">
+                <div class="mb-3">
+                    <label for="message" class="form-label">Enter Symptoms:</label>
+                    <textarea class="form-control" id="message" rows="3"></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="sendMessage()">Analyze</button>
+            </div>
+        </div>
+
+        <!-- Response Time Section -->
+        <div class="debug-section">
+            <div class="debug-header" onclick="toggleSection('response-time-section')">
+                <h5 class="mb-0">Response Time</h5>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="debug-content" id="response-time-section">
+                <p>Timestamp: <span id="timestamp">-</span></p>
+                <p>Response Time: <span id="response-time">-</span> seconds</p>
+            </div>
+        </div>
+
+        <!-- Symptoms Section -->
+        <div class="debug-section">
+            <div class="debug-header" onclick="toggleSection('symptoms-section')">
+                <h5 class="mb-0">Symptoms Analysis</h5>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="debug-content" id="symptoms-section">
+                <h6>Extracted Symptoms:</h6>
+                <div id="extracted-symptoms" class="mb-3"></div>
+                <h6>Assumed Symptoms:</h6>
+                <div id="assumed-symptoms"></div>
+            </div>
+        </div>
+
+        <!-- Diseases Section -->
+        <div class="debug-section">
+            <div class="debug-header" onclick="toggleSection('diseases-section')">
+                <h5 class="mb-0">Disease Predictions</h5>
+                <span class="toggle-icon">▼</span>
+            </div>
+            <div class="debug-content" id="diseases-section">
+                <div class="disease-container" id="disease-predictions"></div>
+                <nav aria-label="Disease pagination" class="pagination-container">
+                    <ul class="pagination justify-content-center" id="pagination"></ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading">
+        <div class="spinner-border text-primary spinner" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <script>
+        let currentDiseases = [];
+        const itemsPerPage = 5;
+        let currentPage = 1;
+
+        function toggleSection(sectionId) {
+            const content = document.getElementById(sectionId);
+            const header = content.previousElementSibling;
+            const icon = header.querySelector('.toggle-icon');
+            
+            content.classList.toggle('show');
+            icon.textContent = content.classList.contains('show') ? '▼' : '▶';
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function createBadge(text, type = 'primary') {
+            const badge = document.createElement('span');
+            badge.className = `badge bg-${type} symptom-badge`;
+            badge.textContent = text;
+            return badge;
+        }
+
+        function createRecommendationList(items) {
+            const list = document.createElement('div');
+            const visibleItems = items.slice(0, 3);
+            const hiddenItems = items.slice(3);
+            
+            visibleItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'recommendation-item';
+                div.textContent = item;
+                list.appendChild(div);
+            });
+            
+            if (hiddenItems.length > 0) {
+                const expandDiv = document.createElement('div');
+                expandDiv.className = 'expand-button';
+                expandDiv.textContent = `Show ${hiddenItems.length} more...`;
+                expandDiv.onclick = function() {
+                    const hiddenDiv = document.createElement('div');
+                    hiddenDiv.className = 'collapsed-content';
+                    hiddenItems.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'recommendation-item';
+                        div.textContent = item;
+                        hiddenDiv.appendChild(div);
+                    });
+                    expandDiv.parentNode.replaceChild(hiddenDiv, expandDiv);
+                    hiddenDiv.style.display = 'block';
+                };
+                list.appendChild(expandDiv);
+            }
+            
+            return list;
+        }
+
+        function createDiseaseCard(disease) {
+            const card = document.createElement('div');
+            card.className = 'card disease-card';
+            
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body';
+            
+            // Disease name and similarity score
+            const title = document.createElement('h5');
+            title.className = 'card-title';
+            title.textContent = `${disease.name} (${(disease.similarity_score * 100).toFixed(2)}%)`;
+            
+            // Similarity bar
+            const similarityBar = document.createElement('div');
+            similarityBar.className = 'similarity-bar';
+            const similarityFill = document.createElement('div');
+            similarityFill.className = 'similarity-fill';
+            similarityFill.style.width = `${disease.similarity_score * 100}%`;
+            similarityBar.appendChild(similarityFill);
+            
+            // Matched symptoms
+            const matchedSymptoms = document.createElement('div');
+            matchedSymptoms.className = 'mb-3';
+            const matchedTitle = document.createElement('h6');
+            matchedTitle.textContent = 'Matched Symptoms:';
+            matchedSymptoms.appendChild(matchedTitle);
+            disease.symptoms.matched.forEach(symptom => {
+                matchedSymptoms.appendChild(createBadge(symptom, 'success'));
+            });
+            
+            // All symptoms
+            const allSymptoms = document.createElement('div');
+            allSymptoms.className = 'mb-3';
+            const allTitle = document.createElement('h6');
+            allTitle.textContent = 'All Symptoms:';
+            allSymptoms.appendChild(allTitle);
+            disease.symptoms.all.forEach(symptom => {
+                allSymptoms.appendChild(createBadge(symptom, 'secondary'));
+            });
+            
+            // Recommendations
+            const recommendations = document.createElement('div');
+            recommendations.className = 'mb-3';
+            const recTitle = document.createElement('h6');
+            recTitle.textContent = 'Recommendations:';
+            recommendations.appendChild(recTitle);
+            
+            const meds = document.createElement('div');
+            meds.className = 'mb-2';
+            meds.innerHTML = '<strong>Medications:</strong>';
+            meds.appendChild(createRecommendationList(disease.recommendations.medications));
+            
+            const precautions = document.createElement('div');
+            precautions.className = 'mb-2';
+            precautions.innerHTML = '<strong>Precautions:</strong>';
+            precautions.appendChild(createRecommendationList(disease.recommendations.precautions));
+            
+            const diet = document.createElement('div');
+            diet.className = 'mb-2';
+            diet.innerHTML = '<strong>Diet:</strong>';
+            diet.appendChild(createRecommendationList(disease.recommendations.diet));
+            
+            const workout = document.createElement('div');
+            workout.className = 'mb-2';
+            workout.innerHTML = '<strong>Workout:</strong>';
+            workout.appendChild(createRecommendationList(disease.recommendations.workout));
+            
+            recommendations.appendChild(meds);
+            recommendations.appendChild(precautions);
+            recommendations.appendChild(diet);
+            recommendations.appendChild(workout);
+            
+            cardBody.appendChild(title);
+            cardBody.appendChild(similarityBar);
+            cardBody.appendChild(matchedSymptoms);
+            cardBody.appendChild(allSymptoms);
+            cardBody.appendChild(recommendations);
+            
+            card.appendChild(cardBody);
+            return card;
+        }
+
+        function updatePagination() {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+            
+            const totalPages = Math.ceil(currentDiseases.length / itemsPerPage);
+            
+            // Previous button
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+            const prevLink = document.createElement('a');
+            prevLink.className = 'page-link';
+            prevLink.href = '#';
+            prevLink.textContent = 'Previous';
+            prevLink.onclick = (e) => {
+                e.preventDefault();
+                if (currentPage > 1) {
+                    currentPage--;
+                    displayCurrentPage();
+                }
+            };
+            prevLi.appendChild(prevLink);
+            pagination.appendChild(prevLi);
+            
+            // Page numbers
+            for (let i = 1; i <= totalPages; i++) {
+                const li = document.createElement('li');
+                li.className = `page-item ${currentPage === i ? 'active' : ''}`;
+                const link = document.createElement('a');
+                link.className = 'page-link';
+                link.href = '#';
+                link.textContent = i;
+                link.onclick = (e) => {
+                    e.preventDefault();
+                    currentPage = i;
+                    displayCurrentPage();
+                };
+                li.appendChild(link);
+                pagination.appendChild(li);
+            }
+            
+            // Next button
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+            const nextLink = document.createElement('a');
+            nextLink.className = 'page-link';
+            nextLink.href = '#';
+            nextLink.textContent = 'Next';
+            nextLink.onclick = (e) => {
+                e.preventDefault();
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    displayCurrentPage();
+                }
+            };
+            nextLi.appendChild(nextLink);
+            pagination.appendChild(nextLi);
+        }
+
+        function displayCurrentPage() {
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const currentItems = currentDiseases.slice(start, end);
+            
+            const container = document.getElementById('disease-predictions');
+            container.innerHTML = '';
+            
+            currentItems.forEach(disease => {
+                container.appendChild(createDiseaseCard(disease));
+            });
+            
+            updatePagination();
+        }
+
+        async function sendMessage() {
+            const message = document.getElementById('message').value;
+            if (!message) return;
+
+            showLoading();
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message }),
+                });
+
+                const data = await response.json();
+
+                // Update response time
+                document.getElementById('timestamp').textContent = data.input.timestamp;
+                document.getElementById('response-time').textContent = data.input.response_time.toFixed(3);
+
+                // Update symptoms
+                const extractedSymptoms = document.getElementById('extracted-symptoms');
+                extractedSymptoms.innerHTML = '';
+                data.symptoms.extracted.forEach(symptom => {
+                    extractedSymptoms.appendChild(createBadge(symptom, 'primary'));
+                });
+
+                const assumedSymptoms = document.getElementById('assumed-symptoms');
+                assumedSymptoms.innerHTML = '';
+                data.symptoms.assumed.forEach(symptom => {
+                    assumedSymptoms.appendChild(createBadge(symptom, 'info'));
+                });
+
+                // Update diseases
+                currentDiseases = data.diseases;
+                currentPage = 1;
+                displayCurrentPage();
+
+                // Expand all sections
+                document.querySelectorAll('.debug-content').forEach(content => {
+                    content.classList.add('show');
+                    content.previousElementSibling.querySelector('.toggle-icon').textContent = '▼';
+                });
+
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while processing your request.');
+            } finally {
+                hideLoading();
+            }
+        }
+    </script>
+</body>
+</html> 
