@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Symptom Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .input-section {
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            resize: vertical;
+            min-height: 100px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result-section {
+            margin-top: 20px;
+        }
+        .symptoms-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .symptom-tag {
+            background-color: #e1f5fe;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+        }
+        .disease-list {
+            margin-top: 20px;
+        }
+        .disease-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .disease-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .similarity-score {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 14px;
+        }
+        .workouts-button, .precautions-button {
+            background-color: #2196F3;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+        .workouts-button:hover, .precautions-button:hover {
+            background-color: #1976D2;
+        }
+        .workouts-list, .precautions-list {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e3f2fd;
+            border-radius: 4px;
+            display: none;
+        }
+        .workout-item, .precaution-item {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #bbdefb;
+        }
+        .workout-item:last-child, .precaution-item:last-child {
+            border-bottom: none;
+        }
+        .buttons-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Medical Symptom Analysis</h1>
+        
+        <div class="input-section">
+            <textarea id="symptomInput" placeholder="Describe your symptoms..."></textarea>
+            <button onclick="analyzeSymptoms()">Analyze Symptoms</button>
+        </div>
+        
+        <div class="result-section" id="resultSection" style="display: none;">
+            <h2>Extracted Symptoms</h2>
+            <div class="symptoms-list" id="symptomsList"></div>
+            
+            <h2>Top Matching Diseases</h2>
+            <div class="disease-list" id="diseaseList"></div>
+        </div>
+    </div>
+
+    <script>
+        async function analyzeSymptoms() {
+            const input = document.getElementById('symptomInput').value;
+            if (!input) {
+                alert('Please enter your symptoms');
+                return;
+            }
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: input })
+                });
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while analyzing symptoms');
+            }
+        }
+
+        function displayResults(data) {
+            const resultSection = document.getElementById('resultSection');
+            const symptomsList = document.getElementById('symptomsList');
+            const diseaseList = document.getElementById('diseaseList');
+
+            // Display symptoms
+            symptomsList.innerHTML = data.symptoms.map(symptom => 
+                `<span class="symptom-tag">${symptom}</span>`
+            ).join('');
+
+            // Display diseases with workouts and precautions
+            diseaseList.innerHTML = data.top_diseases.map(disease => `
+                <div class="disease-item">
+                    <div class="disease-header">
+                        <h3>${disease.disease}</h3>
+                        <span class="similarity-score">${(disease.similarity * 100).toFixed(1)}% match</span>
+                    </div>
+                    <div class="buttons-container">
+                        <button class="workouts-button" onclick="toggleWorkouts(this)">Show Workouts</button>
+                        <button class="precautions-button" onclick="togglePrecautions(this)">Show Precautions</button>
+                    </div>
+                    <div class="workouts-list">
+                        ${disease.workouts.map(workout => 
+                            `<div class="workout-item">${workout}</div>`
+                        ).join('')}
+                    </div>
+                    <div class="precautions-list">
+                        ${disease.precautions.map(precaution => 
+                            `<div class="precaution-item">${precaution}</div>`
+                        ).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            resultSection.style.display = 'block';
+        }
+
+        function toggleWorkouts(button) {
+            const workoutsList = button.parentElement.nextElementSibling;
+            if (workoutsList.style.display === 'none') {
+                workoutsList.style.display = 'block';
+                button.textContent = 'Hide Workouts';
+            } else {
+                workoutsList.style.display = 'none';
+                button.textContent = 'Show Workouts';
+            }
+        }
+
+        function togglePrecautions(button) {
+            const precautionsList = button.parentElement.nextElementSibling.nextElementSibling;
+            if (precautionsList.style.display === 'none') {
+                precautionsList.style.display = 'block';
+                button.textContent = 'Hide Precautions';
+            } else {
+                precautionsList.style.display = 'none';
+                button.textContent = 'Show Precautions';
+            }
+        }
+    </script>
+</body>
+</html> 
