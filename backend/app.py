@@ -232,4 +232,4 @@ async def predict_disease(request: MessageRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="localhost", port=8000, reload=True) 
+    uvicorn.run("app:app", host="localhost  ", port=8000, reload=True) 

@@ -37,7 +37,7 @@ function App() {
     setError(null);
 
     try {
-      const response = await axios.post('http://localhost:8000/predict', {
+      const response = await axios.post('http://0.0.0.0:8000/predict', {
         message: symptoms
       });
       setResults(response.data);
